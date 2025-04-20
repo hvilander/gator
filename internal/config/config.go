@@ -4,14 +4,15 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 )
+
+const configFileName = ".gatorconfig.json"
 
 type Config struct {
 	DBURL           string `json:"db_url"`
 	CurrentUserName string `json:"current_user_name"`
 }
-
-const configFileName = ".gatorconfig.json"
 
 func getConfigFilePath() (string, error) {
 	homedir, err := os.UserHomeDir()
@@ -19,7 +20,8 @@ func getConfigFilePath() (string, error) {
 		return "", fmt.Errorf("error getting os home dir: %w", err)
 	}
 
-	return fmt.Sprintf("%s/%s", homedir, configFileName), nil
+	fullPath := filepath.Join(homedir, configFileName)
+	return fullPath, nil
 }
 
 func write(c Config) error {
@@ -28,21 +30,18 @@ func write(c Config) error {
 		return err
 	}
 
-	jsonData, err := json.Marshal(c)
+	file, err := os.Create(path)
 	if err != nil {
 		return err
 	}
+	defer file.Close()
 
-	// read write perm
-	return os.WriteFile(path, jsonData, 0644)
-
+	encoder := json.NewEncoder(file)
+	return encoder.Encode(c)
 }
 
 func (c *Config) SetUser(userName string) error {
-	fmt.Println(*c)
-
 	c.CurrentUserName = userName
-
 	return write(*c)
 }
 

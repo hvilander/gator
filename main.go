@@ -1,8 +1,13 @@
 package main
 
 import (
+	"database/sql"
 	"fmt"
+	"os"
+
 	"github.com/hvilander/gator/internal/config"
+	"github.com/hvilander/gator/internal/database"
+	_ "github.com/lib/pq"
 )
 
 func main() {
@@ -14,7 +19,38 @@ func main() {
 		return
 	}
 
-	cfg.SetUser("hv")
-	fmt.Println(cfg)
+	st := state{config: &cfg}
+	cmds := commands{
+		handlersByName: make(map[string]func(*state, command) error),
+	}
+
+	cmds.register("login", handlerLogin)
+	cmds.register("register", handlerRegister)
+
+	// db connection
+	db, err := sql.Open("postgres", cfg.DBURL)
+	dbQueries := database.New(db)
+	st.db = dbQueries
+
+	args := os.Args
+	if len(args) < 2 {
+		fmt.Println("you need to supply a command")
+		os.Exit(1)
+	}
+
+	name := args[1]
+
+	cmd := command{
+		name: name,
+		args: args[2:],
+	}
+
+	err = cmds.run(&st, cmd)
+	if err != nil {
+		fmt.Printf("run error: %s\n", err)
+		os.Exit(1)
+	}
+
+	os.Exit(0)
 
 }
