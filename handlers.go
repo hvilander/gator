@@ -43,7 +43,7 @@ func handlerLogin(s *state, cmd command) error {
 
 	username := cmd.args[0]
 
-	user, err := s.db.GetUser(context.Background(), username)
+	user, err := s.db.GetUserByName(context.Background(), username)
 	if err != nil {
 		return fmt.Errorf("error fetching user: %w", err)
 	}
@@ -138,7 +138,8 @@ func handlerAddFeed(s *state, cmd command) error {
 
 	//get current user from db
 	username := s.config.CurrentUserName
-	user, err := s.db.GetUser(context.Background(), username)
+	fmt.Println(username)
+	user, err := s.db.GetUserByName(context.Background(), username)
 	if err != nil {
 		return fmt.Errorf("error getting cur user from db: %w", err)
 	}
@@ -158,4 +159,20 @@ func handlerAddFeed(s *state, cmd command) error {
 	s.db.CreateFeed(context.Background(), feedParams)
 
 	return nil
+}
+
+func handlerFeeds(s *state, cmd command) error {
+	feeds, err := s.db.GetFeeds(context.Background())
+	if err != nil {
+		return fmt.Errorf("Error retreving feeds: %w", err)
+	}
+
+	for _, feed := range feeds {
+
+		fmt.Println("Feed Name         URL        User")
+		fmt.Println("---------------------------------")
+		fmt.Printf("%s           %s            %s", feed.FeedName.String, feed.Url.String, feed.UserName)
+	}
+	return nil
+
 }
