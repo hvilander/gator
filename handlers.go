@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -15,6 +17,16 @@ func getNullTime() sql.NullTime {
 	return sql.NullTime{
 		Time:  time.Now(),
 		Valid: true,
+	}
+}
+
+func getNullTimeFromStr(s string) sql.NullTime {
+	time, error := time.Parse(time.RFC1123, s)
+	var isValid = error != nil
+
+	return sql.NullTime{
+		Time:  time,
+		Valid: isValid,
 	}
 }
 
@@ -130,7 +142,7 @@ func handlerAgg(s *state, cmd command) error {
 	for ; ; <-ticker.C {
 		err := scrapeFeeds(s)
 		if err != nil {
-			return err
+			fmt.Println(fmt.Errorf("scrape error: %w", err))
 		}
 	}
 }
@@ -185,7 +197,7 @@ func handlerAddFeed(s *state, cmd command, user database.User) error {
 func handlerFeeds(s *state, cmd command) error {
 	feeds, err := s.db.GetFeeds(context.Background())
 	if err != nil {
-		return fmt.Errorf("Error retreving feeds: %w", err)
+		return fmt.Errorf("error retreving feeds: %w", err)
 	}
 
 	fmt.Println("Feed Name                   URL                  User")
@@ -274,9 +286,62 @@ func scrapeFeeds(s *state) error {
 
 	fmt.Printf("Scraping %s\n", rssFeed.Channel.Title)
 	for _, item := range rssFeed.Channel.Item {
-		fmt.Printf(" *  %s\n", item.Title)
+		currentNullTime := getNullTime()
 
+		postParams := database.CreatePostParams{
+			ID:          uuid.New(),
+			CreatedAt:   currentNullTime,
+			UpdatedAt:   currentNullTime,
+			Title:       getNullString(item.Title),
+			Url:         getNullString(item.Link),
+			Description: getNullString(item.Description),
+			PublishedAt: getNullTimeFromStr(item.PubDate), // todo this may need some normalization
+			FeedID:      getNullUUID(nextFeed.ID),
+		}
+
+		post, err := s.db.CreatePost(context.Background(), postParams)
+		// error are common since it will try to create dups
+		if err != nil {
+			if strings.Contains(err.Error(), "violates unique constraint") {
+				// ignore the error
+				fmt.Println("skipping, post already exists")
+				continue
+			}
+			return fmt.Errorf("error creating post: %w", err)
+		}
+
+		fmt.Printf("created post: %s\n", post.Title.String)
+	}
+	return nil
+}
+
+func handlerBrowse(s *state, cmd command, user database.User) error {
+	var limit int32
+	limit = 2
+	if len(cmd.args) == 1 {
+		arglimit, err := strconv.Atoi(cmd.args[0])
+		limit = int32(arglimit)
+		if err != nil {
+			return fmt.Errorf("error parsing your int argument: %w", err)
+		}
+	}
+
+	params := database.GetPostsByUserIDParams{
+		UserID: getNullUUID(user.ID),
+		Limit:  limit,
+	}
+
+	posts, err := s.db.GetPostsByUserID(context.Background(), params)
+	if err != nil {
+		return fmt.Errorf("Error getting posts: %w", err)
+	}
+
+	for idx, post := range posts {
+		fmt.Printf("Post #%d *  %s\n", idx+1, post.Title.String)
+		fmt.Printf("   pubDate: %s\n", post.PublishedAt.Time)
+		fmt.Printf("   * %s\n", post.Description.String)
 	}
 
 	return nil
+
 }
