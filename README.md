@@ -1,4 +1,5 @@
-
+# Gator
+a guided rss project from boot.dev
 
 Requirements:
 you need to install postgresql, goose, go, 
